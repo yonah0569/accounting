@@ -106,7 +106,7 @@ async function getValidTokens() {
   return updated;
 }
 
-async function qboRequest(pathSegment, { method = "GET", body, retry = 0 } = {}) {
+async function qboRequest(pathSegment, { method = "GET", body, retry = 0, authRetried = false } = {}) {
   const tokens = await getValidTokens();
   const res = await fetch(`${apiBase()}/v3/company/${tokens.realmId}${pathSegment}`, {
     method,
@@ -120,13 +120,31 @@ async function qboRequest(pathSegment, { method = "GET", body, retry = 0 } = {})
 
   if (res.status === 429 && retry < 6) {
     await new Promise((r) => setTimeout(r, Math.min(30000, 1500 * 2 ** retry)));
-    return qboRequest(pathSegment, { method, body, retry: retry + 1 });
+    return qboRequest(pathSegment, { method, body, retry: retry + 1, authRetried });
+  }
+
+  // A 401 despite our proactive refresh means the token was invalidated some other way
+  // (revoked, clock skew) — force one refresh and retry once before giving up.
+  if (res.status === 401 && !authRetried) {
+    const tid = res.headers.get("intuit_tid");
+    console.error(`[quickbooks] 401 on ${pathSegment}, forcing token refresh and retrying once${tid ? ` (intuit_tid=${tid})` : ""}`);
+    const current = tokenStore.load();
+    if (current) {
+      const refreshed = await refreshTokens(current.refreshToken);
+      tokenStore.save({
+        ...current,
+        accessToken: refreshed.access_token,
+        refreshToken: refreshed.refresh_token || current.refreshToken,
+        expiresAt: Date.now() + refreshed.expires_in * 1000,
+      });
+      return qboRequest(pathSegment, { method, body, retry, authRetried: true });
+    }
   }
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const message = data.Fault?.Error?.[0]?.Message || `QuickBooks API error (${res.status})`;
-    throw new QuickBooksError(message, res.status, data);
+    throw new QuickBooksError(message, res.status, { ...data, intuit_tid: res.headers.get("intuit_tid") });
   }
   return data;
 }

@@ -13,6 +13,19 @@ const qbScheduler = require("./services/qbScheduler");
 
 const app = express();
 app.use(express.json());
+
+// Simple password gate for the deployed app — this handles real financial/health
+// credentialing data with no other login system, so it must not be publicly reachable
+// without a password. No-op locally unless APP_PASSWORD is set, so local dev is unaffected.
+function requireAuth(req, res, next) {
+  if (!process.env.APP_PASSWORD) return next();
+  const expected = `Basic ${Buffer.from(`${process.env.APP_USERNAME || "credify"}:${process.env.APP_PASSWORD}`).toString("base64")}`;
+  if (req.headers.authorization === expected) return next();
+  res.set("WWW-Authenticate", 'Basic realm="Credify Tracker"');
+  res.status(401).send("Authentication required");
+}
+app.use(requireAuth);
+
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 app.use("/api/clients", clientsRouter);
