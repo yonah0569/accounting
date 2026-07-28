@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Credify Credentialing Tracker</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>New Credentialing Task</h1>
+    <nav class="header-nav"><a href="/dashboard.html">Billing Dashboard →</a></nav>
+    <div id="qb-status" class="qb-status">Checking QuickBooks connection…</div>
+  </header>
+
+  <main class="layout">
+    <section class="panel left-panel">
+      <h2>Task Details</h2>
+
+      <div class="field-row">
+        <label for="client-select">Client</label>
+        <div class="inline-group">
+          <select id="client-select"></select>
+          <button type="button" id="new-client-btn" class="btn-secondary">+ New Client</button>
+        </div>
+      </div>
+
+      <div id="new-client-form" class="subform hidden">
+        <label>Client name <input type="text" id="new-client-name" /></label>
+        <label class="checkbox-label"><input type="checkbox" id="new-client-custom-pricing" /> Negotiated / custom pricing</label>
+        <div id="custom-rate-fields" class="rate-grid hidden"></div>
+        <div class="inline-group">
+          <button type="button" id="save-client-btn" class="btn-primary">Save Client</button>
+          <button type="button" id="cancel-client-btn" class="btn-secondary">Cancel</button>
+        </div>
+      </div>
+
+      <h3>Service Type</h3>
+      <div id="service-checkboxes" class="service-list"></div>
+
+      <div class="field-row">
+        <label for="assigned-states">Assigned State(s)</label>
+        <input type="text" id="assigned-states" placeholder="e.g. TX, FL, NY" />
+      </div>
+
+      <div class="field-row">
+        <label for="additional-providers">Additional Providers (beyond 3 included)</label>
+        <input type="number" id="additional-providers" min="0" value="0" />
+      </div>
+
+      <div class="field-row">
+        <label for="notes">Notes</label>
+        <textarea id="notes" rows="3" placeholder="Optional"></textarea>
+      </div>
+    </section>
+
+    <section class="panel right-panel">
+      <h2>Financial Summary</h2>
+
+      <div id="line-items" class="line-items"></div>
+
+      <div class="summary-row">
+        <span>Total Fee</span>
+        <strong id="total-fee">$0.00</strong>
+      </div>
+      <div class="summary-row">
+        <span>Deposit Due <em>(50%, non-refundable)</em></span>
+        <strong id="deposit-due">$0.00</strong>
+      </div>
+      <div class="summary-row">
+        <span>Balance Due <em>(50%)</em></span>
+        <strong id="balance-due">$0.00</strong>
+      </div>
+
+      <div class="status-badges">
+        <div class="badge-group">
+          <span>Deposit</span>
+          <span id="deposit-status" class="badge badge-not-sent">Not Sent</span>
+        </div>
+        <div class="badge-group">
+          <span>Balance</span>
+          <span id="balance-status" class="badge badge-not-sent">Not Sent</span>
+        </div>
+      </div>
+
+      <p id="form-error" class="error hidden"></p>
+    </section>
+  </main>
+
+  <footer class="actions">
+    <button type="button" id="create-task-btn" class="btn-primary">Create Task</button>
+    <button type="button" id="preview-invoice-btn" class="btn-secondary">Preview QB Invoice</button>
+    <a id="view-clickup-link" class="btn-secondary btn-link disabled" href="#" target="_blank" rel="noopener">View in ClickUp</a>
+  </footer>
+
+  <section class="panel task-list-panel">
+    <h2>Tasks</h2>
+    <table id="task-table">
+      <thead>
+        <tr>
+          <th>ID</th><th>Client</th><th>Status</th><th>Total</th><th>Deposit</th><th>Balance</th><th>Deposit Status</th><th>Balance Status</th><th>ClickUp</th><th>QuickBooks</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <div id="invoice-preview-modal" class="modal hidden">
+    <div class="modal-content">
+      <h2>QB Invoice Preview</h2>
+      <pre id="invoice-preview-body"></pre>
+      <button type="button" id="close-preview-btn" class="btn-secondary">Close</button>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

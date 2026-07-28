@@ -1,0 +1,20 @@
+{
+  "name": "credify-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Credentialing task + financial tracking, synced with ClickUp and QuickBooks Online.",
+  "main": "src/server.js",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test ./test/*.test.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "express": "^4.19.2",
+    "dotenv": "^16.4.5"
+  }
+}
