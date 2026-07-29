@@ -1,5 +1,5 @@
 const el = (id) => document.getElementById(id);
-const money = (n) => `$${Number(n).toFixed(2)}`;
+const money = (n) => `$${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 async function api(path, options) {
   const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
@@ -10,97 +10,121 @@ async function api(path, options) {
 
 let currentFilters = { pcName: "", state: "", insurance: "" };
 
-function badgeClass(status) {
-  if (status === "Paid") return "paid";
-  if (status === "Sent") return "sent";
-  return "not-sent";
-}
+const statusPill = (label, status) =>
+  `<span class="pill pill-${status.toLowerCase().replace(/\s+/g, "-")}">${label} ${status}</span>`;
 
 function renderFilterOptions(selectEl, values, current) {
-  const options = ['<option value="">All</option>', ...values.map((v) => `<option value="${v}" ${v === current ? "selected" : ""}>${v}</option>`)];
-  selectEl.innerHTML = options.join("");
+  selectEl.innerHTML = [
+    '<option value="">All</option>',
+    ...values.map((v) => `<option value="${v}" ${v === current ? "selected" : ""}>${v}</option>`),
+  ].join("");
 }
 
-function renderGroups(clients) {
-  const container = el("db-groups");
-  if (!clients.length) {
-    container.innerHTML = '<p class="db-empty">No imported tasks match these filters.</p>';
-    return;
-  }
+function providerRow(p) {
+  return `
+    <tr data-task-id="${p.id}">
+      <td>${p.providerName}</td>
+      <td class="col-status">${p.clickupStatus || "—"}</td>
+      <td class="col-num"><input type="number" step="0.01" class="edit-field" data-field="totalFee" value="${p.totalFee}" /></td>
+      <td class="col-pills">
+        ${statusPill("Deposit", p.depositPaymentStatus)}
+        ${p.balanceBillable ? statusPill("Balance", p.balancePaymentStatus) : '<span class="pill pill-na">Balance N/A</span>'}
+      </td>
+      <td class="col-link">${p.clickupTaskUrl ? `<a href="${p.clickupTaskUrl}" target="_blank" rel="noopener">ClickUp ↗</a>` : ""}</td>
+    </tr>`;
+}
 
-  container.innerHTML = clients
-    .map((c, ci) => `
-      <div class="db-client" data-client-index="${ci}">
-        <div class="db-client-header" data-toggle="${ci}">
-          <div>
-            <div class="db-client-name">${c.clientName}</div>
-            <div class="db-client-meta">${c.providers.length} provider${c.providers.length === 1 ? "" : "s"}</div>
-          </div>
-          <div class="db-client-totals">
-            <span>Total<strong>${money(c.total)}</strong></span>
-            <span>Paid<strong>${money(c.paid)}</strong></span>
-            <span>Owed Now<strong>${money(c.owedNow)}</strong></span>
-            <span>Will Owe<strong>${money(c.willOwe)}</strong></span>
-          </div>
-          <div class="db-client-toggle">▾ expand</div>
-        </div>
-        <div class="db-client-body">
-          ${c.providers
-            .map(
-              (p) => `
-            <div class="db-provider">
-              <div class="db-provider-name">${p.providerName}</div>
-              <table class="db-task-table">
-                <thead>
-                  <tr>
-                    <th>Payer</th><th>State</th><th>ClickUp Status</th>
-                    <th>Deposit</th><th>Deposit Status</th>
-                    <th>Balance</th><th>Balance Status</th><th>Total</th><th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${p.tasks
-                    .map(
-                      (t) => `
-                    <tr data-task-id="${t.id}">
-                      <td>${t.payerName || "—"}</td>
-                      <td>${t.state || "—"}</td>
-                      <td>${t.clickupStatus}</td>
-                      <td><input type="number" step="0.01" class="edit-field" data-field="depositDue" value="${t.depositDue}" /></td>
-                      <td><select class="edit-field" data-field="depositPaymentStatus">
-                        ${["Not Sent", "Sent", "Paid"].map((s) => `<option value="${s}" ${s === t.depositPaymentStatus ? "selected" : ""}>${s}</option>`).join("")}
-                      </select></td>
-                      <td>${t.balanceBillable ? `<input type="number" step="0.01" class="edit-field" data-field="balanceDue" value="${t.balanceDue}" />` : `<span title="Not yet billable">${money(t.balanceDue)}</span>`}</td>
-                      <td>${t.balanceBillable ? `<select class="edit-field" data-field="balancePaymentStatus">${["Not Sent", "Sent", "Paid"].map((s) => `<option value="${s}" ${s === t.balancePaymentStatus ? "selected" : ""}>${s}</option>`).join("")}</select>` : `<span class="db-badge not-sent">N/A</span>`}</td>
-                      <td><input type="number" step="0.01" class="edit-field" data-field="totalFee" value="${t.totalFee}" /></td>
-                      <td>${t.clickupTaskUrl ? `<a href="${t.clickupTaskUrl}" target="_blank" rel="noopener">ClickUp</a>` : ""}</td>
-                    </tr>`
-                    )
-                    .join("")}
-                </tbody>
-              </table>
-            </div>`
-            )
-            .join("")}
-        </div>
-      </div>`
-    )
-    .join("");
+function stateBlock(st) {
+  const groupFeeHtml = st.groupFee
+    ? `<tr class="group-fee-row" data-task-id="${st.groupFee.id}">
+         <td><strong>Group enrollment</strong><span class="muted-note">covers the practice with this payer</span></td>
+         <td class="col-status">${st.groupFee.clickupStatus || "—"}</td>
+         <td class="col-num"><input type="number" step="0.01" class="edit-field" data-field="totalFee" value="${st.groupFee.totalFee}" /></td>
+         <td class="col-pills">
+           ${statusPill("Deposit", st.groupFee.depositPaymentStatus)}
+           ${st.groupFee.balanceBillable ? statusPill("Balance", st.groupFee.balancePaymentStatus) : '<span class="pill pill-na">Balance N/A</span>'}
+         </td>
+         <td class="col-link">${st.groupFee.clickupTaskUrl ? `<a href="${st.groupFee.clickupTaskUrl}" target="_blank" rel="noopener">ClickUp ↗</a>` : ""}</td>
+       </tr>`
+    : "";
 
-  container.querySelectorAll(".db-client-header").forEach((header) => {
-    header.addEventListener("click", () => header.closest(".db-client").classList.toggle("expanded"));
-  });
+  const billableProviders = st.providers.filter((p) => p.totalFee > 0);
+  const includedProviders = st.providers.filter((p) => p.totalFee === 0 && !p.isDuplicate);
+  const duplicateProviders = st.providers.filter((p) => p.totalFee === 0 && p.isDuplicate);
 
+  const includedHtml = includedProviders.length
+    ? `<tr class="included-row">
+         <td colspan="5"><span class="muted-note">Included at no extra charge: ${includedProviders.map((p) => p.providerName).join(", ")}</span></td>
+       </tr>`
+    : "";
+
+  const duplicateHtml = duplicateProviders.length
+    ? `<tr class="included-row">
+         <td colspan="5"><span class="muted-note">Duplicate entries, not billed again: ${duplicateProviders.map((p) => p.providerName).join(", ")}</span></td>
+       </tr>`
+    : "";
+
+  return `
+    <details class="state-block">
+      <summary>
+        <span class="state-name">${st.state}</span>
+        <span class="state-meta">${st.providers.length + (st.groupFee ? 1 : 0)} provider${st.providers.length === 0 && st.groupFee ? "" : "s"}</span>
+        <span class="state-total">${money(st.total)}</span>
+      </summary>
+      <table class="detail-table">
+        <thead>
+          <tr><th>Provider</th><th>ClickUp Status</th><th class="col-num">Amount</th><th>Billing</th><th></th></tr>
+        </thead>
+        <tbody>
+          ${groupFeeHtml}
+          ${billableProviders.map(providerRow).join("")}
+          ${includedHtml}
+          ${duplicateHtml}
+        </tbody>
+      </table>
+    </details>`;
+}
+
+function payerBlock(payer) {
+  return `
+    <details class="payer-block">
+      <summary>
+        <span class="payer-name">${payer.payerName}</span>
+        <span class="payer-meta">${payer.states.length} state${payer.states.length === 1 ? "" : "s"}</span>
+        <span class="payer-total">${money(payer.total)}</span>
+      </summary>
+      <div class="payer-body">${payer.states.map(stateBlock).join("")}</div>
+    </details>`;
+}
+
+function clientBlock(c) {
+  return `
+    <details class="client-block">
+      <summary>
+        <span class="client-name">${c.clientName}</span>
+        <span class="client-figures">
+          <span><em>Total</em>${money(c.total)}</span>
+          <span class="fig-paid"><em>Paid</em>${money(c.paid)}</span>
+          <span class="fig-owed"><em>Owed now</em>${money(c.owedNow)}</span>
+          <span class="fig-will"><em>Not yet billed</em>${money(c.willOwe)}</span>
+        </span>
+      </summary>
+      <div class="client-body">${c.payers.map(payerBlock).join("")}</div>
+    </details>`;
+}
+
+function wireEdits(container) {
   container.querySelectorAll(".edit-field").forEach((field) => {
     field.addEventListener("change", async () => {
       const taskId = field.closest("tr").dataset.taskId;
-      const payload = {};
-      payload[field.dataset.field] = field.type === "number" ? Number(field.value) : field.value;
       try {
-        await api(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify(payload) });
+        await api(`/api/tasks/${taskId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ totalFee: Number(field.value) }),
+        });
         await loadDashboard();
       } catch (err) {
-        alert(`Failed to save: ${err.message}`);
+        alert(`Could not save: ${err.message}`);
       }
     });
   });
@@ -108,9 +132,7 @@ function renderGroups(clients) {
 
 async function loadDashboard() {
   const params = new URLSearchParams();
-  if (currentFilters.pcName) params.set("pcName", currentFilters.pcName);
-  if (currentFilters.state) params.set("state", currentFilters.state);
-  if (currentFilters.insurance) params.set("insurance", currentFilters.insurance);
+  for (const [k, v] of Object.entries(currentFilters)) if (v) params.set(k, v);
 
   const data = await api(`/api/dashboard?${params.toString()}`);
 
@@ -123,46 +145,11 @@ async function loadDashboard() {
   renderFilterOptions(el("filter-state"), data.filterOptions.states, currentFilters.state);
   renderFilterOptions(el("filter-insurance"), data.filterOptions.insurances, currentFilters.insurance);
 
-  renderGroups(data.clients);
-}
-
-function describeSchedule(status, { succeededLabel, resultText }) {
-  const next = status.nextRunAt ? new Date(status.nextRunAt).toLocaleString() : "not yet scheduled (runs on next server start)";
-  const last = status.lastRunAt
-    ? `Last run ${new Date(status.lastRunAt).toLocaleString()} (${resultText(status.lastResult)})`
-    : "Never run yet";
-  return `${last}. Next scheduled: ${next}.`;
-}
-
-async function loadSyncStatus() {
-  try {
-    const status = await api("/api/quickbooks/schedule-status");
-    el("invoice-sync-status-text").textContent = "New invoices: " + describeSchedule(status.invoiceSync, {
-      resultText: (r) => `${r?.succeeded ?? 0} synced, ${r?.failed ?? 0} failed`,
-    });
-    el("payment-check-status-text").textContent = "Payment check: " + describeSchedule(status.paymentCheck, {
-      resultText: (r) => `${r?.updated ?? 0} tasks updated, ${r?.newlyPaid?.length ?? 0} newly marked Paid`,
-    });
-  } catch {
-    el("invoice-sync-status-text").textContent = "Could not load sync schedule.";
-    el("payment-check-status-text").textContent = "";
-  }
-}
-
-async function loadQbStatus() {
-  const statusEl = el("qb-status");
-  try {
-    const status = await api("/auth/quickbooks/status");
-    if (status.connected) {
-      statusEl.textContent = `QuickBooks connected (Realm ${status.realmId})`;
-      statusEl.className = "qb-status connected";
-    } else {
-      statusEl.innerHTML = `QuickBooks not connected <a href="/auth/quickbooks" target="_blank" rel="noopener">Connect</a>`;
-      statusEl.className = "qb-status disconnected";
-    }
-  } catch {
-    statusEl.textContent = "Could not check QuickBooks status";
-  }
+  const container = el("db-groups");
+  container.innerHTML = data.clients.length
+    ? data.clients.map(clientBlock).join("")
+    : '<p class="db-empty">Nothing matches these filters.</p>';
+  wireEdits(container);
 }
 
 const monthLabel = (ym) => {
@@ -175,30 +162,80 @@ async function loadGrowth() {
   try {
     const { months } = await api("/api/dashboard/growth");
     if (!months.length) {
-      container.innerHTML = '<p class="db-empty">No dated enrollments imported yet.</p>';
+      container.innerHTML = '<p class="db-empty">No dated enrollments yet.</p>';
       return;
     }
     const max = Math.max(...months.map((m) => m.total));
     container.innerHTML = months
       .map((m) => {
-        const heightPct = max > 0 ? Math.max(4, (m.total / max) * 100) : 4;
+        const h = max > 0 ? Math.max(4, (m.total / max) * 110) : 4;
         const pct = m.growthPct;
-        const pctHtml =
-          pct === null
-            ? ""
-            : `<span class="db-growth-pct ${pct >= 0 ? "up" : "down"}">${pct >= 0 ? "▲" : "▼"} ${Math.abs(pct).toFixed(0)}%</span>`;
-        return `
-          <div class="db-growth-bar-wrap">
+        const pctHtml = pct === null ? "" :
+          `<span class="db-growth-pct ${pct >= 0 ? "up" : "down"}">${pct >= 0 ? "▲" : "▼"} ${Math.abs(pct).toFixed(0)}%</span>`;
+        return `<div class="db-growth-bar-wrap">
             <span class="db-growth-value">${money(m.total)}</span>
             ${pctHtml}
-            <div class="db-growth-bar" style="height:${heightPct}px"></div>
+            <div class="db-growth-bar" style="height:${h}px"></div>
             <span class="db-growth-month">${monthLabel(m.month)}</span>
           </div>`;
       })
       .join("");
   } catch (err) {
-    container.innerHTML = `<p class="db-empty">Could not load growth data: ${err.message}</p>`;
+    container.innerHTML = `<p class="db-empty">Could not load growth: ${err.message}</p>`;
   }
+}
+
+function describeSchedule(status, resultText) {
+  const next = status.nextRunAt ? new Date(status.nextRunAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "on next start";
+  const last = status.lastRunAt
+    ? `${new Date(status.lastRunAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })} — ${resultText(status.lastResult)}`
+    : "never run";
+  return `last ${last} · next ${next}`;
+}
+
+async function loadSyncStatus() {
+  try {
+    const s = await api("/api/quickbooks/schedule-status");
+    el("invoice-sync-status-text").textContent =
+      "Invoices to QuickBooks: " + describeSchedule(s.invoiceSync, (r) => `${r?.succeeded ?? 0} sent`);
+    el("payment-check-status-text").textContent =
+      "Payments from QuickBooks: " + describeSchedule(s.paymentCheck, (r) => `${r?.newlyPaid?.length ?? 0} newly paid`);
+  } catch {
+    el("invoice-sync-status-text").textContent = "Could not load sync schedule.";
+    el("payment-check-status-text").textContent = "";
+  }
+}
+
+async function loadQbStatus() {
+  const statusEl = el("qb-status");
+  try {
+    const s = await api("/auth/quickbooks/status");
+    if (s.connected) {
+      statusEl.textContent = "QuickBooks connected";
+      statusEl.className = "qb-status connected";
+    } else {
+      statusEl.innerHTML = 'QuickBooks disconnected <a href="/auth/quickbooks">Reconnect</a>';
+      statusEl.className = "qb-status disconnected";
+    }
+  } catch {
+    statusEl.textContent = "QuickBooks status unknown";
+  }
+}
+
+function busy(btn, label, fn) {
+  return async () => {
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = label;
+    try {
+      await fn();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  };
 }
 
 function init() {
@@ -207,52 +244,32 @@ function init() {
   loadDashboard();
   loadGrowth();
 
-  ["filter-pc", "filter-state", "filter-insurance"].forEach((id) => {
+  const filterMap = { "filter-pc": "pcName", "filter-state": "state", "filter-insurance": "insurance" };
+  for (const [id, key] of Object.entries(filterMap)) {
     el(id).addEventListener("change", (e) => {
-      const key = id === "filter-pc" ? "pcName" : id === "filter-state" ? "state" : "insurance";
       currentFilters[key] = e.target.value;
       loadDashboard();
     });
-  });
+  }
 
   el("clear-filters-btn").addEventListener("click", () => {
     currentFilters = { pcName: "", state: "", insurance: "" };
     loadDashboard();
   });
 
-  el("sync-now-btn").addEventListener("click", async () => {
-    const btn = el("sync-now-btn");
-    btn.disabled = true;
-    btn.textContent = "Syncing…";
-    try {
-      const result = await api("/api/quickbooks/batch-sync", { method: "POST" });
-      alert(`Sync complete: ${result.succeeded} synced, ${result.failed} failed, ${result.attempted} attempted.`);
-      await loadSyncStatus();
-      await loadDashboard();
-    } catch (err) {
-      alert(`Sync failed: ${err.message}`);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "Sync New Invoices Now";
-    }
-  });
+  const payBtn = el("check-payments-btn");
+  payBtn.addEventListener("click", busy(payBtn, "Checking…", async () => {
+    const r = await api("/api/quickbooks/refresh-all-payments", { method: "POST" });
+    alert(`Checked ${r.invoicesChecked} invoices.\n${r.newlyPaid.length} newly marked paid.`);
+    await Promise.all([loadSyncStatus(), loadDashboard()]);
+  }));
 
-  el("check-payments-btn").addEventListener("click", async () => {
-    const btn = el("check-payments-btn");
-    btn.disabled = true;
-    btn.textContent = "Checking…";
-    try {
-      const result = await api("/api/quickbooks/refresh-all-payments", { method: "POST" });
-      alert(`Checked ${result.invoicesChecked} invoices. ${result.updated} tasks updated, ${result.newlyPaid.length} newly marked Paid.`);
-      await loadSyncStatus();
-      await loadDashboard();
-    } catch (err) {
-      alert(`Check failed: ${err.message}`);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "Check for Payments Now";
-    }
-  });
+  const syncBtn = el("sync-now-btn");
+  syncBtn.addEventListener("click", busy(syncBtn, "Sending…", async () => {
+    const r = await api("/api/quickbooks/batch-sync", { method: "POST", body: JSON.stringify({}) });
+    alert(`${r.succeeded} invoices sent to QuickBooks.\n${r.failed} failed.`);
+    await Promise.all([loadSyncStatus(), loadDashboard()]);
+  }));
 }
 
 init();

@@ -57,6 +57,7 @@ const migrations = [
   ["clickup_list_name", "TEXT"],
   ["balance_billable", "INTEGER NOT NULL DEFAULT 0"],
   ["clickup_date_created", "TEXT"],
+  ["duplicate_of_task_id", "INTEGER"],
 ];
 for (const [column, definition] of migrations) {
   if (!existingColumns.has(column)) {

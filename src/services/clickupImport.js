@@ -214,8 +214,47 @@ async function importCommercialList(listId, fallbackClientName, { dryRun = false
   return results;
 }
 
+// Lists in the Commercial Enrollments folder that aren't real client books of business.
+const NON_CLIENT_LISTS = new Set([
+  "901327697483", // ***PORTAL ACCSESS***
+  "901321880743", // +++State Licensing +++
+  "901321880461", // NJ GOV Medicaid — wrong program type for this folder
+]);
+
+const ENROLLMENTS_SPACE_ID = process.env.CLICKUP_ENROLLMENTS_SPACE_ID || "901310005602";
+const COMMERCIAL_FOLDER_NAME = process.env.CLICKUP_COMMERCIAL_FOLDER || "Commercial Enrollments";
+
+const clientNameFromList = (listName) =>
+  listName.replace(/\s*-\s*commercial\s*$/i, "").replace(/\s+commercial\s*$/i, "").trim();
+
+// Discovers every real client list in the Commercial Enrollments folder and imports it.
+// Idempotent — already-imported tasks are skipped — so this is safe to run on a schedule.
+async function importAllCommercial({ onProgress = null } = {}) {
+  const folders = await clickup.getFolders(ENROLLMENTS_SPACE_ID);
+  const folder = folders.folders.find((f) => f.name === COMMERCIAL_FOLDER_NAME);
+  if (!folder) throw new Error(`ClickUp folder "${COMMERCIAL_FOLDER_NAME}" not found`);
+
+  const lists = folder.lists.filter((l) => l.task_count > 0 && !NON_CLIENT_LISTS.has(l.id));
+  const results = { lists: lists.length, imported: 0, skippedExisting: 0, failures: [] };
+
+  for (let i = 0; i < lists.length; i++) {
+    const list = lists[i];
+    try {
+      const r = await importCommercialList(list.id, clientNameFromList(list.name));
+      results.imported += r.imported;
+      results.skippedExisting += r.skippedExisting;
+    } catch (err) {
+      results.failures.push({ list: list.name, message: err.message });
+    }
+    if (onProgress) onProgress(i + 1, lists.length, list.name);
+  }
+
+  return results;
+}
+
 module.exports = {
   importCommercialList,
+  importAllCommercial,
   STATUS_MAP,
   BALANCE_BILLABLE_STATUSES,
   PAYER_ENROLLMENT_RATE,

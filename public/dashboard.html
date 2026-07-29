@@ -9,62 +9,64 @@
 </head>
 <body>
   <header class="app-header">
-    <h1>Billing Dashboard</h1>
-    <nav class="header-nav"><a href="/index.html">← New Task Form</a></nav>
-    <div id="qb-status" class="qb-status">Checking QuickBooks connection…</div>
+    <h1>Billing</h1>
+    <nav class="header-nav"><a href="/index.html">New Task</a></nav>
+    <div id="qb-status" class="qb-status">Checking QuickBooks…</div>
   </header>
 
-  <section class="db-summary">
-    <div class="db-card">
-      <span class="db-card-label">Total</span>
-      <span class="db-card-value" id="sum-total">$0.00</span>
-    </div>
-    <div class="db-card paid">
-      <span class="db-card-label">Paid</span>
-      <span class="db-card-value" id="sum-paid">$0.00</span>
-    </div>
-    <div class="db-card owed">
-      <span class="db-card-label">Owed Now</span>
-      <span class="db-card-value" id="sum-owed">$0.00</span>
-    </div>
-    <div class="db-card will-owe">
-      <span class="db-card-label">Will Owe</span>
-      <span class="db-card-value" id="sum-will-owe">$0.00</span>
-    </div>
-  </section>
+  <main class="page">
+    <section class="db-summary">
+      <div class="db-card">
+        <span class="db-card-label">Total value</span>
+        <span class="db-card-value" id="sum-total">$0.00</span>
+      </div>
+      <div class="db-card paid">
+        <span class="db-card-label">Paid</span>
+        <span class="db-card-value" id="sum-paid">$0.00</span>
+      </div>
+      <div class="db-card owed">
+        <span class="db-card-label">Invoiced, unpaid</span>
+        <span class="db-card-value" id="sum-owed">$0.00</span>
+      </div>
+      <div class="db-card will-owe">
+        <span class="db-card-label">Not yet billed</span>
+        <span class="db-card-value" id="sum-will-owe">$0.00</span>
+      </div>
+    </section>
 
-  <section class="db-sync-status">
-    <div>
-      <div id="invoice-sync-status-text">Checking invoice sync schedule…</div>
-      <div id="payment-check-status-text">Checking payment check schedule…</div>
-    </div>
-    <div class="db-sync-actions">
-      <button type="button" id="check-payments-btn" class="btn-secondary">Check for Payments Now</button>
-      <button type="button" id="sync-now-btn" class="btn-secondary">Sync New Invoices Now</button>
-    </div>
-  </section>
+    <section class="db-sync-status">
+      <div class="sync-lines">
+        <div id="invoice-sync-status-text">Loading schedule…</div>
+        <div id="payment-check-status-text"></div>
+      </div>
+      <div class="db-sync-actions">
+        <button type="button" id="check-payments-btn" class="btn-secondary">Check payments</button>
+        <button type="button" id="sync-now-btn" class="btn-primary">Send new invoices</button>
+      </div>
+    </section>
 
-  <section class="db-growth">
-    <h2>Monthly Growth <span class="db-growth-sub">(by ClickUp enrollment creation date)</span></h2>
-    <div id="db-growth-chart" class="db-growth-chart"><p class="db-empty">Loading…</p></div>
-  </section>
+    <section class="db-filters">
+      <label>Practice
+        <select id="filter-pc"><option value="">All</option></select>
+      </label>
+      <label>Insurance
+        <select id="filter-insurance"><option value="">All</option></select>
+      </label>
+      <label>State
+        <select id="filter-state"><option value="">All</option></select>
+      </label>
+      <button type="button" id="clear-filters-btn" class="btn-secondary">Clear</button>
+    </section>
 
-  <section class="db-filters">
-    <label>PC
-      <select id="filter-pc"><option value="">All</option></select>
-    </label>
-    <label>State
-      <select id="filter-state"><option value="">All</option></select>
-    </label>
-    <label>Insurance
-      <select id="filter-insurance"><option value="">All</option></select>
-    </label>
-    <button type="button" id="clear-filters-btn" class="btn-secondary">Clear Filters</button>
-  </section>
+    <section id="db-groups" class="db-groups">
+      <p class="db-empty">Loading…</p>
+    </section>
 
-  <section id="db-groups" class="db-groups">
-    <p class="db-empty">Loading…</p>
-  </section>
+    <section class="db-growth">
+      <h2>Monthly growth <span class="db-growth-sub">by enrollment date in ClickUp</span></h2>
+      <div id="db-growth-chart" class="db-growth-chart"><p class="db-empty">Loading…</p></div>
+    </section>
+  </main>
 
   <script src="/dashboard.js"></script>
 </body>

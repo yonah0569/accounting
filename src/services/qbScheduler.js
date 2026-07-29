@@ -1,6 +1,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { runBatchSync, refreshAllPaymentStatuses } = require("./qbSync");
+const { importAllCommercial } = require("./clickupImport");
+const { repriceDuplicateGroupFees, repriceDuplicateProviders } = require("./reprice");
 
 // A recurring job: runs immediately on startup if overdue (or never run), then every
 // `intervalMs` after that. State (last run time/result) persists across restarts.
@@ -47,13 +49,29 @@ function createScheduler({ name, stateFileName, intervalMs, run }) {
   return { start, runAndRecord, getStatus };
 }
 
-// Creates new invoices for tasks that need them — every 14 days, per the confirmed
-// billing cadence (deposit at start, balance once approved/active).
+// The full billing cycle, every 3 weeks: pull the latest enrollments and prices from
+// ClickUp, collapse any duplicate group fees across the whole dataset, then push the
+// resulting invoices to QuickBooks. This is the ClickUp -> QuickBooks pipeline; the app
+// is the mediator between them.
+async function runBillingCycle() {
+  const imported = await importAllCommercial();
+  const dupeFees = repriceDuplicateGroupFees();
+  const dupeProviders = repriceDuplicateProviders();
+  const invoiced = await runBatchSync({ concurrency: 4 });
+  return {
+    importedTasks: imported.imported,
+    importFailures: imported.failures.length,
+    duplicatesRemoved: dupeFees.tasksZeroed + dupeProviders.tasksZeroed,
+    succeeded: invoiced.succeeded,
+    failed: invoiced.failed,
+  };
+}
+
 const invoiceScheduler = createScheduler({
-  name: "qb-invoice-scheduler",
+  name: "billing-cycle",
   stateFileName: "qb-sync-schedule.json",
-  intervalMs: 14 * 24 * 60 * 60 * 1000,
-  run: runBatchSync,
+  intervalMs: 21 * 24 * 60 * 60 * 1000,
+  run: runBillingCycle,
 });
 
 // Checks QuickBooks for incoming payments — daily, so a payment that comes in gets
@@ -77,4 +95,4 @@ function getStatus() {
   };
 }
 
-module.exports = { start, getStatus, invoiceScheduler, paymentScheduler };
+module.exports = { start, getStatus, invoiceScheduler, paymentScheduler, runBillingCycle };
