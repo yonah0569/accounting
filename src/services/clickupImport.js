@@ -27,13 +27,12 @@ const STATUS_MAP = {
 
 const BALANCE_BILLABLE_STATUSES = new Set(["app approved", "active"]);
 
-// ClickUp's Deposit Paid / Full Amount Paid flags are the real, manually-tracked ground
-// truth for what's actually been collected — they win over anything else. Sent status
-// never gets downgraded once set (e.g. by us creating a QuickBooks invoice).
-function derivePaymentStatus(clickupPaid, clickupSent, existingStatus) {
-  if (clickupPaid) return "Paid";
-  if (existingStatus === "Paid" || existingStatus === "Sent") return existingStatus;
-  if (clickupSent) return "Sent";
+// QuickBooks is the sole authority on payment status: "Paid" means a QuickBooks invoice
+// has a zero balance, "Sent" means we created the invoice. ClickUp's Deposit Paid /
+// Full Amount Paid checkboxes are deliberately NOT used — they're manually maintained
+// and were found to disagree with QuickBooks. Imported tasks therefore start unbilled
+// and only move once the QuickBooks sync says so.
+function derivePaymentStatus(existingStatus) {
   return existingStatus || "Not Sent";
 }
 
@@ -178,8 +177,8 @@ async function importCommercialList(listId, fallbackClientName, { dryRun = false
     }
 
     const client = getOrCreateClient(row.pcName);
-    const depositPaymentStatus = derivePaymentStatus(row.clickupDepositPaid, row.clickupDepositSent, null);
-    const balancePaymentStatus = derivePaymentStatus(row.clickupFullPaid, row.clickupFullSent, null);
+    const depositPaymentStatus = derivePaymentStatus(null);
+    const balancePaymentStatus = derivePaymentStatus(null);
 
     db.prepare(`
       INSERT INTO tasks (
