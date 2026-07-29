@@ -4,3 +4,4 @@ data/
 *.db
 *.db-journal
 npm-debug.log*
+scripts/

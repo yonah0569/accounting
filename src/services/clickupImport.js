@@ -59,22 +59,34 @@ function getOrCreateClient(name) {
   return client;
 }
 
-// Pricing rule (confirmed): $1,200 per (PC, payer) pair covers the first 3 distinct
-// providers enrolled with that payer as ONE enrollment fee, charged against the first
-// provider in the group. Providers 4+ under that same (PC, payer) each cost $275
-// individually. Providers 2-3 ride along at $0 (already covered by the group fee).
+// The team marks the group/entity-level task by prefixing its name with "*", labelling
+// it "Group-", or naming it after the practice entity itself — as opposed to an
+// individual provider's name.
+function isEntityRow(task) {
+  const name = (task.providerName || "").trim();
+  if (name.startsWith("*")) return true;
+  if (/\bgroup\b/i.test(name)) return true;
+  const pc = (task.pcName || "").trim().toLowerCase();
+  return pc.length > 0 && name.toLowerCase().includes(pc);
+}
+
+// Pricing rules (confirmed with the team):
 //
-// EXCEPTION (confirmed): when the real ClickUp task already has a "Full Amount" entered
-// by the team, that's authoritative and overrides the formula — it's an already-determined
-// real amount, not derived. "Deposit Amount" likewise overrides the 50/50 split when set;
-// otherwise the deposit defaults to half of whatever the final total is.
+//  * Group-level enrollment: $1,200 per (PC, payer) pair, covering the first 3 providers.
+//    Exactly ONE of these may exist per group — a second $1,200 in the same group is a
+//    duplicate (same enrollment logged twice) and must not be billed again.
+//  * Per-provider charges ($275 for providers beyond the included 3) are a SEPARATE
+//    thing from the group fee — both can legitimately appear in the same group.
+//  * When a ClickUp task carries its own "Full Amount", that's the real negotiated
+//    number and wins over the formula. "Deposit Amount" likewise is used verbatim even
+//    when it isn't a 50/50 split; the deposit only falls back to half when it's unset.
 function priceGroup(tasksInGroup) {
   const providerOrder = [];
   for (const t of tasksInGroup) {
     if (!providerOrder.includes(t.providerName)) providerOrder.push(t.providerName);
   }
 
-  return tasksInGroup.map((t) => {
+  const priced = tasksInGroup.map((t) => {
     const rank = providerOrder.indexOf(t.providerName);
     let totalFee;
     if (rank === 0) totalFee = PAYER_ENROLLMENT_RATE;
@@ -91,6 +103,24 @@ function priceGroup(tasksInGroup) {
 
     return { ...t, totalFee, depositDue, balanceDue, providerRank: rank };
   });
+
+  // Collapse duplicate group-level enrollments: a single enrollment logged on several
+  // tasks must only be billed once. The surviving charge goes on whichever task the team
+  // marked as the entity/group row — they prefix those with "*" or name them "Group-" —
+  // so the invoice references the group rather than an arbitrary individual provider.
+  const groupFeeTasks = priced.filter((t) => t.totalFee === PAYER_ENROLLMENT_RATE);
+  if (groupFeeTasks.length > 1) {
+    const keeper = groupFeeTasks.find(isEntityRow) || groupFeeTasks[0];
+    for (const t of groupFeeTasks) {
+      if (t === keeper) continue;
+      t.totalFee = 0;
+      t.depositDue = 0;
+      t.balanceDue = 0;
+      t.duplicateGroupFee = true;
+    }
+  }
+
+  return priced;
 }
 
 // Imports every task from a ClickUp Commercial Enrollment list as a local task row.

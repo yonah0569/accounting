@@ -26,10 +26,20 @@ router.post("/tasks/:id/refresh-payment-status", async (req, res) => {
   }
 });
 
-// Manual trigger for the same batch job the biweekly scheduler runs.
+// Manual trigger for the same batch job the biweekly scheduler runs. Accepts optional
+// { limit, concurrency } so a large backlog can be driven in chunks over HTTP without
+// any single request running long enough to time out.
 router.post("/batch-sync", async (req, res) => {
-  const result = await runBatchSync();
-  res.json(result);
+  const { limit, concurrency } = req.body || {};
+  try {
+    const result = await runBatchSync({
+      limit: Number(limit) || null,
+      concurrency: Number(concurrency) || 1,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(err.status || 502).json({ error: err.message });
+  }
 });
 
 // Pulls current payment status for every synced invoice from QuickBooks in bulk and

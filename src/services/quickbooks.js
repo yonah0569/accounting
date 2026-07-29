@@ -262,6 +262,15 @@ async function updateInvoiceAmount(invoiceId, newAmount) {
 
 const query = (sql) => qboRequest(`/query?query=${encodeURIComponent(sql)}`);
 
+// Voids/deletes an invoice — used when a task's charge is removed entirely (e.g. a
+// duplicate group enrollment that shouldn't have been billed).
+async function deleteInvoice(invoiceId, syncToken) {
+  return qboRequest("/invoice?operation=delete", {
+    method: "POST",
+    body: { Id: invoiceId, SyncToken: syncToken },
+  });
+}
+
 module.exports = {
   QuickBooksError,
   getAuthorizeUrl,
@@ -272,5 +281,6 @@ module.exports = {
   createInvoice,
   getInvoice,
   updateInvoiceAmount,
+  deleteInvoice,
   query,
 };

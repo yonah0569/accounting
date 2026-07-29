@@ -117,8 +117,11 @@ async function refreshTaskPaymentStatus(taskId) {
 // Finds every task that needs a QuickBooks invoice created (new deposit, or a balance
 // that just became billable) and syncs them, `concurrency` at a time. This is what the
 // biweekly job runs. onProgress(done, total) is optional, for long-running CLI use.
-async function runBatchSync({ concurrency = 1, onProgress = null } = {}) {
-  const pending = db.prepare(`
+// `limit` caps how many tasks one call processes — used when driving the sync over HTTP
+// in chunks so a single request can't run long enough to time out. `remaining` in the
+// result tells the caller whether to call again.
+async function runBatchSync({ concurrency = 1, onProgress = null, limit = null } = {}) {
+  const allPending = db.prepare(`
     SELECT id FROM tasks
     WHERE total_fee > 0
       AND (
@@ -126,8 +129,9 @@ async function runBatchSync({ concurrency = 1, onProgress = null } = {}) {
         OR (balance_billable = 1 AND qb_balance_invoice_id IS NULL)
       )
   `).all();
+  const pending = limit ? allPending.slice(0, limit) : allPending;
 
-  const results = { attempted: pending.length, succeeded: 0, failed: 0, errors: [] };
+  const results = { attempted: pending.length, totalPending: allPending.length, succeeded: 0, failed: 0, errors: [] };
   let cursor = 0;
 
   async function worker() {
@@ -146,6 +150,7 @@ async function runBatchSync({ concurrency = 1, onProgress = null } = {}) {
   }
 
   await Promise.all(Array.from({ length: Math.min(concurrency, pending.length) || 1 }, worker));
+  results.remaining = Math.max(0, results.totalPending - results.succeeded);
   return results;
 }
 
