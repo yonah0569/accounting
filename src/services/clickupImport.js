@@ -247,6 +247,9 @@ async function importAllCommercial({ onProgress = null } = {}) {
       results.failures.push({ list: list.name, message: err.message });
     }
     if (onProgress) onProgress(i + 1, lists.length, list.name);
+    // Brief pause between lists so a small instance can reclaim memory between the
+    // large per-list payloads rather than accumulating them back to back.
+    await new Promise((r) => setTimeout(r, 250));
   }
 
   return results;

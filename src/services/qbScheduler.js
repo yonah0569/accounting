@@ -4,9 +4,14 @@ const { runBatchSync, refreshAllPaymentStatuses } = require("./qbSync");
 const { importAllCommercial } = require("./clickupImport");
 const { repriceDuplicateGroupFees, repriceDuplicateProviders } = require("./reprice");
 
-// A recurring job: runs immediately on startup if overdue (or never run), then every
-// `intervalMs` after that. State (last run time/result) persists across restarts.
-function createScheduler({ name, stateFileName, intervalMs, run }) {
+// A recurring job that runs every `intervalMs`, with its last-run time persisted so the
+// schedule survives restarts.
+//
+// `startupGraceMs` is deliberately never zero: a job that fires during boot will run on
+// every restart, and for the heavy billing cycle that meant import-everything-then-crash
+// on a small instance, which restarts, which imports again — a crash loop that takes the
+// whole service down. Holding off until after the app is serving keeps a restart cheap.
+function createScheduler({ name, stateFileName, intervalMs, run, startupGraceMs = 5 * 60 * 1000 }) {
   const stateFile = path.join(__dirname, "..", "..", "data", stateFileName);
 
   function loadState() {
@@ -29,7 +34,7 @@ function createScheduler({ name, stateFileName, intervalMs, run }) {
   function start() {
     const state = loadState();
     const dueAt = state.lastRunAt ? new Date(state.lastRunAt).getTime() + intervalMs : 0;
-    const msUntilDue = Math.max(0, dueAt - Date.now());
+    const msUntilDue = Math.max(startupGraceMs, dueAt - Date.now());
 
     setTimeout(function scheduleNext() {
       runAndRecord()
@@ -72,6 +77,8 @@ const invoiceScheduler = createScheduler({
   stateFileName: "qb-sync-schedule.json",
   intervalMs: 21 * 24 * 60 * 60 * 1000,
   run: runBillingCycle,
+  // The heaviest job in the app — keep it well clear of boot so restarts stay cheap.
+  startupGraceMs: 20 * 60 * 1000,
 });
 
 // Checks QuickBooks for incoming payments — daily, so a payment that comes in gets
